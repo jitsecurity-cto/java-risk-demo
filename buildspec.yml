@@ -1,0 +1,34 @@
+version: 0.2
+env:
+  git-credential-helper: yes
+phases:
+  install:
+    runtime-versions:
+      java: corretto17
+  pre_build:
+    on-failure: ABORT
+    commands:
+    - export s3_prefix=${ARTIFACTS_BUCKET}/${REPO_NAME}/${CODEBUILD_RESOLVED_SOURCE_VERSION}
+    - export s3_public_prefix=${PUBLIC_ARTIFACTS_BUCKET}/Java
+    - echo -e "upload artifacts to -\nhttps://s3.console.aws.amazon.com/s3/buckets/${s3_prefix}/\n"
+    - mkdir .mvn
+    - echo "${MAVEN_CLI_OPTIONS}" > .mvn/maven.config
+  build:
+    on-failure: ABORT
+    commands:
+      - mkdir out
+      - printf "BUILD_ID = $CODEBUILD_BUILD_ID\nBUILD_NUMBER = $CODEBUILD_BUILD_NUMBER\nREVISION = $CODEBUILD_RESOLVED_SOURCE_VERSION" > info.txt
+      - export pom_version=$(grep version pom.xml | grep -v -e '<?xml|~'| head -n 1 | sed 's/[[:space:]]//g' | sed -E 's/<.{0,1}version>//g' | awk '{print $1}')
+      - export package_version=$(echo $pom_version | sed -r "s/(.*)\.([0-9]*)/\1.\2.${CODEBUILD_BUILD_NUMBER}/")
+      - mvn versions:set -DnewVersion=${package_version}
+      - mvn clean package
+      - cp target/risk-demo-${package_version}-jar-with-dependencies.jar out/java-risk-demo.jar
+      - pushd out
+      - |
+        set -e
+        for file in $(find * -type f)
+        do
+          aws s3 cp ${file} s3://${s3_prefix}/
+          aws s3api put-object-tagging --bucket ${ARTIFACTS_BUCKET} --key ${REPO_NAME}/${CODEBUILD_RESOLVED_SOURCE_VERSION}/${file} --tagging "{\"TagSet\": [{ \"Key\": \"version\", \"Value\": \"${package_version}\" }, { \"Key\": \"git_commit\", \"Value\": \"${CODEBUILD_RESOLVED_SOURCE_VERSION}\" }]}"
+        done
+      - popd
