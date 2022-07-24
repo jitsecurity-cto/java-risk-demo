@@ -23,12 +23,12 @@ phases:
       - mvn versions:set -DnewVersion=${package_version}
       - mvn clean package
       - cp target/risk-demo-${package_version}-jar-with-dependencies.jar out/java-risk-demo.jar
-      - pushd out
       - |
         set -e
+        pushd out
         for file in $(find * -type f)
         do
           aws s3 cp ${file} s3://${s3_prefix}/
           aws s3api put-object-tagging --bucket ${ARTIFACTS_BUCKET} --key ${REPO_NAME}/${CODEBUILD_RESOLVED_SOURCE_VERSION}/${file} --tagging "{\"TagSet\": [{ \"Key\": \"version\", \"Value\": \"${package_version}\" }, { \"Key\": \"git_commit\", \"Value\": \"${CODEBUILD_RESOLVED_SOURCE_VERSION}\" }]}"
         done
-      - popd
+        popd
