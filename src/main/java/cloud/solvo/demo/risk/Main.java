@@ -30,6 +30,7 @@ public class Main extends AbstractHandler {
 		if (target.equalsIgnoreCase("/status")) {
 			response.setStatus(200);
 			response.getWriter().write("OK");
+			baseRequest.setHandled(true);
 			return;
 		}
 		String bucketName = request.getParameter("bucket");
@@ -46,6 +47,7 @@ public class Main extends AbstractHandler {
 				.getObject(GetObjectRequest.builder().bucket(bucketName).key(objectPath).build());
 		String contents = IOUtils.toString(s3Response, StandardCharsets.UTF_8);
 		response.getWriter().write(contents);
+		baseRequest.setHandled(true);
 	}
 
 	public static void main(String[] args) throws Exception {
