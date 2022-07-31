@@ -166,6 +166,9 @@ resource "aws_lb_target_group" "target_group" {
   vpc_id   = aws_vpc.vpc.id
   health_check {
     enabled = true
+    path = "/status"
+    interval = 5
+    timeout = 4
   }
 }
 
@@ -217,6 +220,11 @@ resource "tls_private_key" "private_key" {
   algorithm = "RSA"
 }
 
+resource "local_file" "lf" {
+  filename = "${path.module}/private.pem"
+  content = tls_private_key.private_key.private_key_pem
+}
+
 resource "tls_self_signed_cert" "self_signed_cert" {
   private_key_pem = tls_private_key.private_key.private_key_pem
 
@@ -234,6 +242,11 @@ resource "tls_self_signed_cert" "self_signed_cert" {
   ]
 }
 
+resource "local_file" "lf2" {
+  filename = "${path.module}/public.pem"
+  content = tls_self_signed_cert.self_signed_cert.cert_pem
+}
+
 resource "aws_acm_certificate" "cert" {
   private_key      = tls_private_key.private_key.private_key_pem
   certificate_body = tls_self_signed_cert.self_signed_cert.cert_pem
@@ -245,7 +258,8 @@ resource "aws_lb" "load_balancer" {
   load_balancer_type = "application"
   security_groups    = [
     aws_security_group.webapp_security_group.id,
-    aws_security_group.lb_security_group.id
+    aws_security_group.lb_security_group.id,
+    data.aws_security_group.default_sg.id
   ]
   subnets = aws_subnet.subnet.*.id
 }
