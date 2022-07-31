@@ -181,10 +181,10 @@ resource "aws_lb_target_group_attachment" "target_group_ec2" {
 #  ]
 #}
 
-data "aws_acm_certificate" "cert" {
-  domain = local.cert_common_name
-}
-
+#data "aws_acm_certificate" "cert" {
+#  domain = local.cert_common_name
+#}
+#
 resource "aws_lb" "load_balancer" {
   name               = "java-risk-demo-load-balancer"
   internal           = false
@@ -205,7 +205,7 @@ resource "aws_lb_listener" "load_balancer_listener" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.target_group.arn
   }
-  certificate_arn = data.aws_acm_certificate.cert.arn
+  certificate_arn = aws_acm_certificate.cert.arn
 }
 
 resource "aws_inspector_resource_group" "inspector_resource_group" {
@@ -313,8 +313,8 @@ data "aws_iam_policy_document" "app_user_policy_document" {
 #
 resource "local_file" "aws_config_file" {
   content = templatefile("resources/aws_config.txt", {
-#    key_id = aws_iam_access_key.app_access_key.id
-#    secret = aws_iam_access_key.app_access_key.secret
+    #    key_id = aws_iam_access_key.app_access_key.id
+    #    secret = aws_iam_access_key.app_access_key.secret
     key_id = "key"
     secret = "secret"
   })
@@ -361,12 +361,12 @@ resource "aws_instance" "instance" {
   }
 
   provisioner "file" {
-    source = local_file.aws_config_file.filename
+    source      = local_file.aws_config_file.filename
     destination = "/home/ubuntu/.aws/config"
   }
 
   provisioner "file" {
-    source = "resources/java-risk-demo.service"
+    source      = "resources/java-risk-demo.service"
     destination = "/tmp/java-risk-demo.service"
   }
 
@@ -391,4 +391,42 @@ output "vm_public_dns" {
 
 output "lb_zone_id" {
   value = aws_lb.load_balancer.zone_id
+}
+
+resource "tls_private_key" pk {
+  algorithm = "RSA"
+}
+
+resource "tls_self_signed_cert" c {
+  private_key_pem = tls_private_key.pk.private_key_pem
+  subject {
+    common_name  = local.cert_common_name
+    organization = "Solvo LTD"
+  }
+  validity_period_hours = 24 * 365 * 10
+  allowed_uses          = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+  dns_names = [local.cert_common_name]
+  is_ca_certificate = true
+}
+
+resource local_file "private" {
+  content = tls_private_key.pk.private_key_pem
+  filename = "${path.module}/.tmp/private.pem"
+}
+
+resource local_file "public" {
+  content = tls_self_signed_cert.c.cert_pem
+  filename = "${path.module}/.tmp/public.pem"
+}
+
+resource "aws_acm_certificate" "cert" {
+  private_key = tls_private_key.pk.private_key_pem
+  certificate_body = tls_self_signed_cert.c.cert_pem
+  tags = {
+    Name = "java-risk-demo certificate"
+  }
 }
