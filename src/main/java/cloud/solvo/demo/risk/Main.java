@@ -27,6 +27,11 @@ public class Main extends AbstractHandler {
 	public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response)
 			throws IOException, ServletException {
 		logger.info("target={}, request={}", target, request.getRequestURI());
+		if (target.equalsIgnoreCase("/status")) {
+			response.setStatus(200);
+			response.getWriter().write("OK");
+			return;
+		}
 		String bucketName = request.getParameter("bucket");
 		if (StringUtils.isBlank(bucketName)) {
 			throw new IllegalArgumentException("Bucket not provided");

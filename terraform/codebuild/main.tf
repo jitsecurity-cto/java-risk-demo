@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket         = "solvo-terraform-state-prod"
-    key            = "risk-demo/codebuild"
+    key            = "java-risk-demo/codebuild"
     region         = "us-east-1"
     dynamodb_table = "terraform_lock_table"
   }
