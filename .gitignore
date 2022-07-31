@@ -31,6 +31,9 @@ hs_err_pid*
 # IDEA
 /.idea/
 
+# Temp files
+.tmp/
+
 # Terraform
 .terraform/
 *.auto.tfvars

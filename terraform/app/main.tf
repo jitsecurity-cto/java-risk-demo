@@ -7,8 +7,9 @@ terraform {
   }
 
   required_providers {
-    aws = "~> 4.8"
-    tls = "4.0.0"
+    aws   = "~> 4.8"
+    tls   = "4.0.0"
+    local = "2.2.3"
   }
 }
 
@@ -19,6 +20,7 @@ provider "aws" {
 locals {
   vpc_cidr         = "10.0.0.0/16"
   cert_common_name = "java-risk-demo.solvo.dev"
+  bucket_name      = "solvo-java-risk-demo"
   subnet_cidrs     = [
     "10.0.0.0/24",
     "10.0.1.0/24"
@@ -122,53 +124,16 @@ resource "aws_security_group_rule" "incoming_https_rule" {
   security_group_id = aws_security_group.lb_security_group.id
 }
 
-resource "aws_instance" "instance" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.nano"
-  subnet_id              = aws_subnet.subnet[0].id
-  vpc_security_group_ids = [
-    data.aws_security_group.default_sg.id,
-    aws_security_group.webapp_security_group.id,
-    aws_security_group.ssh_security_group.id
-  ]
-  key_name = "java-risk-demo"
-  tags     = {
-    Name = "java-risk-demo"
-  }
-
-  connection {
-    type        = "ssh"
-    user        = "ubuntu"
-    private_key = file(var.ssh_private_key_file)
-    host        = self.public_ip
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "wget https://inspector-agent.amazonaws.com/linux/latest/install",
-      "chmod +x ./install",
-      "sudo ./install",
-      "sudo apt-get -y update",
-      "sudo apt-get -y upgrade",
-      "sudo apt-get -y install default-jre"
-    ]
-  }
-
-  provisioner "local-exec" {
-    command = "scp -o StrictHostKeyChecking=no ${var.app_file} ubuntu@${self.public_ip}:~/"
-  }
-}
-
 resource "aws_lb_target_group" "target_group" {
   name     = "java-risk-demo-target-group"
   port     = 8090
   protocol = "HTTP"
   vpc_id   = aws_vpc.vpc.id
   health_check {
-    enabled = true
-    path = "/status"
-    interval = 5
-    timeout = 4
+    enabled  = true
+    path     = "/status"
+    interval = 30
+    timeout  = 5
   }
 }
 
@@ -216,40 +181,8 @@ resource "aws_lb_target_group_attachment" "target_group_ec2" {
 #  ]
 #}
 
-resource "tls_private_key" "private_key" {
-  algorithm = "RSA"
-}
-
-resource "local_file" "lf" {
-  filename = "${path.module}/private.pem"
-  content = tls_private_key.private_key.private_key_pem
-}
-
-resource "tls_self_signed_cert" "self_signed_cert" {
-  private_key_pem = tls_private_key.private_key.private_key_pem
-
-  subject {
-    common_name  = local.cert_common_name
-    organization = "Solvo LTD"
-  }
-
-  validity_period_hours = 24*365*10
-
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "server_auth",
-  ]
-}
-
-resource "local_file" "lf2" {
-  filename = "${path.module}/public.pem"
-  content = tls_self_signed_cert.self_signed_cert.cert_pem
-}
-
-resource "aws_acm_certificate" "cert" {
-  private_key      = tls_private_key.private_key.private_key_pem
-  certificate_body = tls_self_signed_cert.self_signed_cert.cert_pem
+data "aws_acm_certificate" "cert" {
+  domain = local.cert_common_name
 }
 
 resource "aws_lb" "load_balancer" {
@@ -272,15 +205,7 @@ resource "aws_lb_listener" "load_balancer_listener" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.target_group.arn
   }
-  certificate_arn = aws_acm_certificate.cert.arn
-}
-
-output "load_balancer_dns_name" {
-  value = aws_lb.load_balancer.dns_name
-}
-
-output "vm_public_dns" {
-  value = aws_instance.instance.public_dns
+  certificate_arn = data.aws_acm_certificate.cert.arn
 }
 
 resource "aws_inspector_resource_group" "inspector_resource_group" {
@@ -349,4 +274,121 @@ resource "aws_cloudwatch_event_target" "inspector_event_target" {
   rule     = aws_cloudwatch_event_rule.inspector_event_schedule.name
   arn      = aws_inspector_assessment_template.inspector_assessment_template.arn
   role_arn = aws_iam_role.inspector_event_role.arn
+}
+
+#resource "aws_iam_user" "app_user" {
+#  name = "java-risk-demo"
+#}
+#
+resource "aws_s3_bucket" "app_bucket" {
+  bucket = "solvo-java-risk-demo"
+}
+
+data "aws_iam_policy_document" "app_user_policy_document" {
+  statement {
+    actions = [
+      "s3:ListBucket"
+    ]
+    effect    = "Allow"
+    resources = ["arn:aws:s3:::${local.bucket_name}"]
+  }
+
+  statement {
+    actions = [
+      "s3:GetObject"
+    ]
+    effect    = "Allow"
+    resources = ["arn:aws:s3:::${local.bucket_name}/*"]
+  }
+}
+
+#resource "aws_iam_user_policy" "app_user_policy" {
+#  user   = aws_iam_user.app_user.name
+#  policy = data.aws_iam_policy_document.app_user_policy_document.json
+#}
+#
+#resource "aws_iam_access_key" "app_access_key" {
+#  user = aws_iam_user.app_user.name
+#}
+#
+resource "local_file" "aws_config_file" {
+  content = templatefile("resources/aws_config.txt", {
+#    key_id = aws_iam_access_key.app_access_key.id
+#    secret = aws_iam_access_key.app_access_key.secret
+    key_id = "key"
+    secret = "secret"
+  })
+  filename = "${path.root}/.tmp/config"
+}
+
+resource "aws_instance" "instance" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.nano"
+  subnet_id              = aws_subnet.subnet[0].id
+  vpc_security_group_ids = [
+    data.aws_security_group.default_sg.id,
+    aws_security_group.webapp_security_group.id,
+    aws_security_group.ssh_security_group.id
+  ]
+  key_name = "java-risk-demo"
+  tags     = {
+    Name = "java-risk-demo"
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file(var.ssh_private_key_file)
+    host        = self.public_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "wget https://inspector-agent.amazonaws.com/linux/latest/install",
+      "chmod +x ./install",
+      "sudo ./install",
+      "sudo apt-get -y update",
+      "sudo apt-get -y upgrade",
+      "sudo apt-get -y install default-jre",
+      "mkdir -p ~/.aws",
+      "touch ~/.aws/config",
+      "chmod 600 ~/.aws/config"
+    ]
+  }
+
+  provisioner "local-exec" {
+    command = "scp -o StrictHostKeyChecking=no ${var.app_file} ubuntu@${self.public_ip}:~/java-risk-demo.jar"
+  }
+
+  provisioner "file" {
+    source = local_file.aws_config_file.filename
+    destination = "/home/ubuntu/.aws/config"
+  }
+
+  provisioner "file" {
+    source = "resources/java-risk-demo.service"
+    destination = "/tmp/java-risk-demo.service"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo mv /tmp/java-risk-demo.service /etc/systemd/system/",
+      "sudo chown root:root /etc/systemd/system/java-risk-demo.service",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable java-risk-demo",
+      "sudo systemctl start java-risk-demo"
+    ]
+  }
+}
+
+output "load_balancer_dns_name" {
+  value = aws_lb.load_balancer.dns_name
+}
+
+output "vm_public_dns" {
+  value = aws_instance.instance.public_dns
+}
+
+output "lb_zone_id" {
+  value = aws_lb.load_balancer.zone_id
 }
