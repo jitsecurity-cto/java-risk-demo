@@ -100,8 +100,8 @@ resource "aws_security_group" "ssh_security_group" {
 resource "aws_security_group_rule" "incoming_web_rule" {
   type                     = "ingress"
   protocol                 = "TCP"
-  from_port                = 8090
-  to_port                  = 8090
+  from_port                = 8080
+  to_port                  = 8080
   source_security_group_id = aws_security_group.webapp_security_group.id
   security_group_id        = aws_security_group.webapp_security_group.id
 }
@@ -126,7 +126,7 @@ resource "aws_security_group_rule" "incoming_https_rule" {
 
 resource "aws_lb_target_group" "target_group" {
   name     = "java-risk-demo-target-group"
-  port     = 8090
+  port     = 8080
   protocol = "HTTP"
   vpc_id   = aws_vpc.vpc.id
   health_check {
@@ -278,7 +278,7 @@ resource "aws_cloudwatch_event_target" "inspector_event_target" {
 
 data "aws_iam_policy_document" "instance_profile_assume_policy" {
   statement {
-    effect = "Allow"
+    effect  = "Allow"
     actions = ["sts:AssumeRole"]
     principals {
       identifiers = ["ec2.amazonaws.com"]
@@ -287,7 +287,7 @@ data "aws_iam_policy_document" "instance_profile_assume_policy" {
   }
 }
 resource "aws_iam_role" "instance_profile_role" {
-  name = "java-risk-demo"
+  name               = "java-risk-demo"
   assume_role_policy = data.aws_iam_policy_document.instance_profile_assume_policy.json
 }
 
@@ -313,6 +313,11 @@ data "aws_iam_policy_document" "app_user_policy_document" {
   }
 }
 
+resource "aws_iam_role_policy" "app_role_policy" {
+  role = aws_iam_role.instance_profile_role.id
+  policy = data.aws_iam_policy_document.app_user_policy_document.json
+}
+
 resource "aws_iam_instance_profile" "instance_profile" {
   name = "java-risk-demo-instance-profile"
   role = aws_iam_role.instance_profile_role.name
@@ -320,7 +325,7 @@ resource "aws_iam_instance_profile" "instance_profile" {
 
 resource "aws_instance" "instance" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.nano"
+  instance_type          = "t3.small"
   subnet_id              = aws_subnet.subnet[0].id
   vpc_security_group_ids = [
     data.aws_security_group.default_sg.id,
@@ -348,29 +353,23 @@ resource "aws_instance" "instance" {
       "sudo ./install",
       "sudo apt-get -y update",
       "sudo apt-get -y upgrade",
-      "sudo apt-get -y install default-jre",
-      "mkdir -p ~/.aws",
-      "touch ~/.aws/config",
-      "chmod 600 ~/.aws/config"
+      "echo \"Installing software\"",
+      "sudo apt-get -y install default-jre jetty9",
+      "echo \"Software installed\"",
+      # Bug in the installer (doesn't add syslog to the jetty9 log)
+      "sudo systemctl stop jetty9",
+      "sudo chmod -R 777 /var/log/jetty9",
+      "sudo systemctl start jetty9"
     ]
   }
 
   provisioner "local-exec" {
-    command = "scp -o StrictHostKeyChecking=no ${var.app_file} ubuntu@${self.public_ip}:~/java-risk-demo.jar"
-  }
-
-  provisioner "file" {
-    source      = "resources/java-risk-demo.service"
-    destination = "/tmp/java-risk-demo.service"
+    command = "scp -o StrictHostKeyChecking=no ${var.app_file} ubuntu@${self.public_ip}:~/app.war"
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo mv /tmp/java-risk-demo.service /etc/systemd/system/",
-      "sudo chown root:root /etc/systemd/system/java-risk-demo.service",
-      "sudo systemctl daemon-reload",
-      "sudo systemctl enable java-risk-demo",
-      "sudo systemctl start java-risk-demo"
+      "sudo mv /home/ubuntu/app.war /var/lib/jetty9/webapps/app.war"
     ]
   }
 }
@@ -391,24 +390,24 @@ resource "tls_self_signed_cert" "cert" {
     "digital_signature",
     "server_auth",
   ]
-  dns_names = [local.cert_common_name]
+  dns_names         = [local.cert_common_name]
   is_ca_certificate = true
 }
 
 resource local_file "private" {
-  content = tls_private_key.private_key.private_key_pem
+  content  = tls_private_key.private_key.private_key_pem
   filename = "${path.module}/.tmp/private.pem"
 }
 
 resource local_file "public" {
-  content = tls_self_signed_cert.cert.cert_pem
+  content  = tls_self_signed_cert.cert.cert_pem
   filename = "${path.module}/.tmp/public.pem"
 }
 
 resource "aws_acm_certificate" "cert" {
-  private_key = tls_private_key.private_key.private_key_pem
+  private_key      = tls_private_key.private_key.private_key_pem
   certificate_body = tls_self_signed_cert.cert.cert_pem
-  tags = {
+  tags             = {
     Name = "java-risk-demo certificate"
   }
 }

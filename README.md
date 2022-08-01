@@ -2,7 +2,7 @@
 
 1. Apply the `codebuild` Terraform template in the `Dev` workspace. (We perform the build in the `dev` account because
    we already have very good build infrastructure set up there).
-2. Download the `java-risk-demo.jar` file, which was built, into your workstation.
+2. Download the `app.war` file, which was built, into your workstation.
 3. Apply the `app` Terraform template in the `demo` workspace. Use `-var app_file=` to specify the path to the JAR
    file you downloaded.
 4. Grab the values of the Terraform outputs. You'll need them later. (Use `terraform output` to show them again)
