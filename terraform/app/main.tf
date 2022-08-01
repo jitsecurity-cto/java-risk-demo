@@ -276,10 +276,21 @@ resource "aws_cloudwatch_event_target" "inspector_event_target" {
   role_arn = aws_iam_role.inspector_event_role.arn
 }
 
-#resource "aws_iam_user" "app_user" {
-#  name = "java-risk-demo"
-#}
-#
+data "aws_iam_policy_document" "instance_profile_assume_policy" {
+  statement {
+    effect = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      identifiers = ["ec2.amazonaws.com"]
+      type        = "Service"
+    }
+  }
+}
+resource "aws_iam_role" "instance_profile_role" {
+  name = "java-risk-demo"
+  assume_role_policy = data.aws_iam_policy_document.instance_profile_assume_policy.json
+}
+
 resource "aws_s3_bucket" "app_bucket" {
   bucket = "solvo-java-risk-demo"
 }
@@ -302,23 +313,9 @@ data "aws_iam_policy_document" "app_user_policy_document" {
   }
 }
 
-#resource "aws_iam_user_policy" "app_user_policy" {
-#  user   = aws_iam_user.app_user.name
-#  policy = data.aws_iam_policy_document.app_user_policy_document.json
-#}
-#
-#resource "aws_iam_access_key" "app_access_key" {
-#  user = aws_iam_user.app_user.name
-#}
-#
-resource "local_file" "aws_config_file" {
-  content = templatefile("resources/aws_config.txt", {
-    #    key_id = aws_iam_access_key.app_access_key.id
-    #    secret = aws_iam_access_key.app_access_key.secret
-    key_id = "key"
-    secret = "secret"
-  })
-  filename = "${path.root}/.tmp/config"
+resource "aws_iam_instance_profile" "instance_profile" {
+  name = "java-risk-demo-instance-profile"
+  role = aws_iam_role.instance_profile_role.name
 }
 
 resource "aws_instance" "instance" {
@@ -334,6 +331,8 @@ resource "aws_instance" "instance" {
   tags     = {
     Name = "java-risk-demo"
   }
+
+  iam_instance_profile = aws_iam_instance_profile.instance_profile.name
 
   connection {
     type        = "ssh"
@@ -361,11 +360,6 @@ resource "aws_instance" "instance" {
   }
 
   provisioner "file" {
-    source      = local_file.aws_config_file.filename
-    destination = "/home/ubuntu/.aws/config"
-  }
-
-  provisioner "file" {
     source      = "resources/java-risk-demo.service"
     destination = "/tmp/java-risk-demo.service"
   }
@@ -381,24 +375,12 @@ resource "aws_instance" "instance" {
   }
 }
 
-output "load_balancer_dns_name" {
-  value = aws_lb.load_balancer.dns_name
-}
-
-output "vm_public_dns" {
-  value = aws_instance.instance.public_dns
-}
-
-output "lb_zone_id" {
-  value = aws_lb.load_balancer.zone_id
-}
-
-resource "tls_private_key" pk {
+resource "tls_private_key" "private_key" {
   algorithm = "RSA"
 }
 
-resource "tls_self_signed_cert" c {
-  private_key_pem = tls_private_key.pk.private_key_pem
+resource "tls_self_signed_cert" "cert" {
+  private_key_pem = tls_private_key.private_key.private_key_pem
   subject {
     common_name  = local.cert_common_name
     organization = "Solvo LTD"
@@ -414,19 +396,39 @@ resource "tls_self_signed_cert" c {
 }
 
 resource local_file "private" {
-  content = tls_private_key.pk.private_key_pem
+  content = tls_private_key.private_key.private_key_pem
   filename = "${path.module}/.tmp/private.pem"
 }
 
 resource local_file "public" {
-  content = tls_self_signed_cert.c.cert_pem
+  content = tls_self_signed_cert.cert.cert_pem
   filename = "${path.module}/.tmp/public.pem"
 }
 
 resource "aws_acm_certificate" "cert" {
-  private_key = tls_private_key.pk.private_key_pem
-  certificate_body = tls_self_signed_cert.c.cert_pem
+  private_key = tls_private_key.private_key.private_key_pem
+  certificate_body = tls_self_signed_cert.cert.cert_pem
   tags = {
     Name = "java-risk-demo certificate"
   }
+}
+
+output "load_balancer_dns_name" {
+  value = aws_lb.load_balancer.dns_name
+}
+
+output "vm_public_dns" {
+  value = aws_instance.instance.public_dns
+}
+
+output "lb_zone_id" {
+  value = aws_lb.load_balancer.zone_id
+}
+
+output "assessment_arn" {
+  value = aws_inspector_assessment_template.inspector_assessment_template.arn
+}
+
+output "public_cert" {
+  value = tls_self_signed_cert.cert.cert_pem
 }

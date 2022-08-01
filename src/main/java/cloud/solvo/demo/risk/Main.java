@@ -42,8 +42,7 @@ public class Main extends AbstractHandler {
         if (StringUtils.isBlank(objectPath)) {
             throw new IllegalArgumentException("Object path not provided");
         }
-        try (S3Client client = S3Client.builder().credentialsProvider(
-                ProfileCredentialsProvider.create()).build()) {
+        try (S3Client client = S3Client.builder().build()) {
             ResponseInputStream<GetObjectResponse> s3Response = client
                     .getObject(GetObjectRequest.builder().bucket(bucketName).key(objectPath).build());
             String contents = IOUtils.toString(s3Response, StandardCharsets.UTF_8);
