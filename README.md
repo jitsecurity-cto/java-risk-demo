@@ -15,6 +15,12 @@
    ```bash
    aws inspector start-assessment-run --assessment-template-arn <template-arn-from-output>
    ```
+8. SSH to the VM (see instructions below) to disable automatic security updates. So far I couldn't find a way
+   to properly automate it:
+   ```ssh
+   sudo dpkg-reconfigure unattended-upgrades
+   ```
+   And then select "No".
 
 ## SSH'ing to the VM
 

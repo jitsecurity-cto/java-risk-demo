@@ -19,13 +19,16 @@ provider "aws" {
 
 locals {
   vpc_cidr         = "10.0.0.0/16"
-  cert_common_name = "java-risk-demo.solvo.dev"
-  bucket_name      = "solvo-java-risk-demo"
+  app_name         = "app-orders"
+  cert_common_name = "${local.app_name}.solvo.dev"
+  bucket_name      = "${local.app_name}-data-${data.aws_caller_identity.current.account_id}"
   subnet_cidrs     = [
     "10.0.0.0/24",
     "10.0.1.0/24"
   ]
 }
+
+data "aws_caller_identity" "current" {}
 
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -45,7 +48,7 @@ resource "aws_vpc" "vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
   tags                 = {
-    Name = "java-risk-demo"
+    Name = "${local.app_name}-vpc"
   }
 }
 
@@ -57,7 +60,7 @@ data "aws_security_group" "default_sg" {
 resource "aws_internet_gateway" "internet_gateway" {
   vpc_id = aws_vpc.vpc.id
   tags   = {
-    Name = "java-risk-demo-ig"
+    Name = "${local.app_name}-ig"
   }
 }
 
@@ -78,7 +81,7 @@ resource "aws_subnet" "subnet" {
   availability_zone       = data.aws_availability_zones.available_azs.names[count.index]
   map_public_ip_on_launch = true
   tags                    = {
-    Name = "java-risk-demo-subnet-${count.index}"
+    Name = "${local.app_name}-subnet-${count.index}"
   }
 }
 
@@ -186,7 +189,7 @@ resource "aws_lb_target_group_attachment" "target_group_ec2" {
 #}
 #
 resource "aws_lb" "load_balancer" {
-  name               = "java-risk-demo-load-balancer"
+  name               = "${local.app_name}-load-balancer"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [
@@ -210,22 +213,21 @@ resource "aws_lb_listener" "load_balancer_listener" {
 
 resource "aws_inspector_resource_group" "inspector_resource_group" {
   tags = {
-    Name = "java-risk-demo"
+    Name = aws_instance.instance.tags["Name"]
   }
 }
 
 resource "aws_inspector_assessment_target" "inspector_assessment_target" {
-  name               = "java-risk-demo assessment target"
+  name               = "${local.app_name} assessment target"
   resource_group_arn = aws_inspector_resource_group.inspector_resource_group.arn
 }
 
 data "aws_inspector_rules_packages" "rules" {}
 
 resource "aws_inspector_assessment_template" "inspector_assessment_template" {
-  name       = "java-risk-demo assessment template"
+  name       = "${local.app_name} assessment template"
   target_arn = aws_inspector_assessment_target.inspector_assessment_target.arn
   duration   = 3600
-
   rules_package_arns = data.aws_inspector_rules_packages.rules.arns
 }
 
@@ -243,7 +245,7 @@ data "aws_iam_policy_document" "inspector_assume_policy_document" {
 }
 
 resource "aws_iam_role" "inspector_event_role" {
-  name               = "java-risk-demo-inspector-event-role"
+  name               = "${local.app_name}-inspector-event-role"
   assume_role_policy = data.aws_iam_policy_document.inspector_assume_policy_document.json
 }
 
@@ -265,8 +267,8 @@ resource "aws_iam_role_policy" "inspector_event" {
 }
 
 resource "aws_cloudwatch_event_rule" "inspector_event_schedule" {
-  name                = "java-risk-demo-schedule"
-  description         = "Trigger an Inspector assessment for the java risk demo app"
+  name                = "${local.app_name}-schedule"
+  description         = "Trigger an Inspector assessment for ${local.app_name}"
   schedule_expression = "cron(0 0/12 * * ? *)"
 }
 
@@ -287,40 +289,36 @@ data "aws_iam_policy_document" "instance_profile_assume_policy" {
   }
 }
 resource "aws_iam_role" "instance_profile_role" {
-  name               = "java-risk-demo"
+  name               = "${local.app_name}-role"
   assume_role_policy = data.aws_iam_policy_document.instance_profile_assume_policy.json
 }
 
 resource "aws_s3_bucket" "app_bucket" {
-  bucket = "solvo-java-risk-demo"
+  bucket = local.bucket_name
 }
 
-data "aws_iam_policy_document" "app_user_policy_document" {
-  statement {
-    actions = [
-      "s3:ListBucket"
-    ]
-    effect    = "Allow"
-    resources = ["arn:aws:s3:::${local.bucket_name}"]
-  }
-
-  statement {
-    actions = [
-      "s3:GetObject"
-    ]
-    effect    = "Allow"
-    resources = ["arn:aws:s3:::${local.bucket_name}/*"]
-  }
+resource "aws_s3_object" "app_bucket_object" {
+  bucket = aws_s3_bucket.app_bucket.bucket
+  key = "file.txt"
+  content = "Hello world!"
 }
 
-resource "aws_iam_role_policy" "app_role_policy" {
+resource "aws_iam_role_policy_attachment" "app_role_policy_attachment" {
   role = aws_iam_role.instance_profile_role.id
-  policy = data.aws_iam_policy_document.app_user_policy_document.json
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
 }
 
 resource "aws_iam_instance_profile" "instance_profile" {
-  name = "java-risk-demo-instance-profile"
+  name = "${local.app_name}-instance-profile"
   role = aws_iam_role.instance_profile_role.name
+}
+
+resource "local_file" "cron_file" {
+  filename = ".tmp/cron-file"
+  content = templatefile("resources/trigger-app-orders", {
+    bucket_name = aws_s3_bucket.app_bucket.bucket
+    object_name = aws_s3_object.app_bucket_object.key
+  })
 }
 
 resource "aws_instance" "instance" {
@@ -332,9 +330,9 @@ resource "aws_instance" "instance" {
     aws_security_group.webapp_security_group.id,
     aws_security_group.ssh_security_group.id
   ]
-  key_name = "java-risk-demo"
+  key_name = local.app_name
   tags     = {
-    Name = "java-risk-demo"
+    Name = "${local.app_name}-instance"
   }
 
   iam_instance_profile = aws_iam_instance_profile.instance_profile.name
@@ -346,33 +344,38 @@ resource "aws_instance" "instance" {
     host        = self.public_ip
   }
 
+  provisioner "file" {
+    source = "resources/init.sh"
+    destination = "/tmp/init.sh"
+  }
+
+  provisioner "file" {
+    source = local_file.cron_file.filename
+    destination = "/tmp/cron-file"
+  }
+
   provisioner "remote-exec" {
     inline = [
-      "wget https://inspector-agent.amazonaws.com/linux/latest/install",
-      "chmod +x ./install",
-      "sudo ./install",
-      "sudo apt-get -y update",
-      "sudo apt-get -y upgrade",
-      "echo \"Installing software\"",
-      "sudo apt-get -y install default-jre jetty9 docker.io",
-      "sudo usermod -G docker ubuntu",
-      "echo \"Software installed\"",
-      "sudo apt-get install liblog4j2-java=2.11.2-1",
-      # Bug in the installer (doesn't add syslog to the jetty9 log)
-      "sudo systemctl stop jetty9",
-      "sudo chmod -R 777 /var/log/jetty9",
-      "sudo systemctl start jetty9"
+      "chmod +x /tmp/script.sh",
+      "/tmp/init.sh ${var.api_key}",
+      "chmod +x /tmp/cron-file",
+      "sudo chown root:root /tmp/cron-file",
+      "sudo mv /tmp/cron-file /etc/cron.weekly/"
     ]
   }
 
   provisioner "local-exec" {
-    command = "scp -o StrictHostKeyChecking=no ${var.app_file} ubuntu@${self.public_ip}:~/app.war"
+    command = "scp -o StrictHostKeyChecking=no -i ${var.ssh_private_key_file} ${var.app_file} ubuntu@${self.public_ip}:~/app.war"
   }
 
   provisioner "remote-exec" {
     inline = [
       "sudo mv /home/ubuntu/app.war /var/lib/jetty9/webapps/app.war"
     ]
+  }
+
+  lifecycle {
+    ignore_changes = [ami]
   }
 }
 
@@ -410,7 +413,7 @@ resource "aws_acm_certificate" "cert" {
   private_key      = tls_private_key.private_key.private_key_pem
   certificate_body = tls_self_signed_cert.cert.cert_pem
   tags             = {
-    Name = "java-risk-demo certificate"
+    Name = "${local.app_name} certificate"
   }
 }
 

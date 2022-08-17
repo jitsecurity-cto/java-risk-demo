@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket         = "solvo-terraform-state-prod"
-    key            = "java-risk-demo/codebuild"
+    key            = "excessive-permissions-demo/codebuild"
     region         = "us-east-1"
     dynamodb_table = "terraform_lock_table"
   }
@@ -17,7 +17,7 @@ provider "aws" {
 
 locals {
   repo_name          = "java-risk-demo"
-  service_name       = "java-risk-demo-build-${terraform.workspace}"
+  service_name       = "excessive-permissions-demo-build-${terraform.workspace}"
   workspace_settings = {
     Dev = {
       github_branch         = "dev"

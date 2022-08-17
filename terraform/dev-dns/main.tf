@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket         = "solvo-terraform-state-prod"
-    key            = "java-risk-demo/dev-dns"
+    key            = "excessive-permissions-demo/dev-dns"
     region         = "us-east-1"
     dynamodb_table = "terraform_lock_table"
   }
@@ -9,6 +9,11 @@ terraform {
   required_providers {
     aws   = "~> 4.8"
   }
+}
+
+variable "app_name" {
+  type = string
+  default = "app-orders"
 }
 
 variable "lb_dns" {
@@ -25,7 +30,7 @@ data "aws_route53_zone" "dns_zone" {
 
 resource "aws_route53_record" "demo-app" {
   zone_id = data.aws_route53_zone.dns_zone.id
-  name = "java-risk-demo.solvo.dev"
+  name = "${var.app_name}.solvo.dev"
   type = "A"
   alias {
     evaluate_target_health = false
