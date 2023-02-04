@@ -162,6 +162,11 @@ resource "aws_codebuild_project" "codebuild" {
     }
 
     environment_variable {
+      name  = "ARTIFACTS_REPO_NAME"
+      value = "maven"
+    }
+
+    environment_variable {
       name  = "REPO_NAME"
       value = local.repo_name
     }
