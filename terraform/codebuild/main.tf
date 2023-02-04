@@ -7,114 +7,142 @@ terraform {
   }
 
   required_providers {
-    aws = "~> 4.8"
+    aws   = "~> 4.8"
+    awscc = "~> 0.45.0"
   }
 }
 
 provider "aws" {
   region = var.region
+
+  default_tags {
+    tags = {
+      "solvo:owner" = local.service_name
+    }
+  }
 }
 
 locals {
-  repo_name          = "java-risk-demo"
-  service_name       = "excessive-permissions-demo-build-${terraform.workspace}"
-  workspace_settings = {
+  repo_name           = "java-risk-demo"
+  service_name        = "excessive-permissions-demo-build-${terraform.workspace}"
+  github_build_branch = "main"
+  workspace_settings  = {
     Dev = {
+      log_retention         = 90
+      # Need full clone in order for gitleaks to work properly
+      git_clone_depth       = 0
       github_branch         = "dev"
       github_webhook_action = "PUSH"
       github_webhook_ref    = "HEAD_REF"
       do_build              = "yes"
     }
-  }[
-  terraform.workspace
-  ]
+  }[terraform.workspace]
 }
 
+# Provides information about the current account
+data "aws_caller_identity" "current" {}
+
+# Our artifacts bucket
+data "aws_s3_bucket" "artifacts_bucket" {
+  bucket = var.artifacts_s3_bucket_name
+}
+
+# Policy document that describes who can assume the codebuild role.
+# This is very unlikely to change between projects.
 data "aws_iam_policy_document" "assume_role_policy" {
   statement {
     effect = "Allow"
-
     principals {
       identifiers = ["codebuild.amazonaws.com"]
       type        = "Service"
     }
-
     actions = ["sts:AssumeRole"]
   }
 }
 
-resource "aws_iam_role" "codebuild_role" {
-  name               = "${local.service_name}-role"
-  assume_role_policy = data.aws_iam_policy_document.assume_role_policy.json
-}
-
-data "aws_caller_identity" "current" {}
-
+# The common codebuild policy that all codebuild roles must attach to.
 data "aws_iam_policy" "codebuild_common_policy" {
   name = "codebuild-common-${terraform.workspace}"
 }
 
-data "aws_iam_policy_document" "codebuild_role_policy" {
-  statement {
-    effect    = "Allow"
-    resources = [
-      "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${local.service_name}",
-      "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/${local.service_name}:*"
-    ]
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-  }
-  statement {
-    effect    = "Allow"
-    resources = [
-      "arn:aws:s3:::${var.artifacts_s3_bucket_name}/${local.repo_name}/*"
-    ]
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:GetObjectTagging",
-      "s3:PutObjectTagging"
-    ]
-  }
-  statement {
-    effect  = "Allow"
-    actions = [
-      "codebuild:CreateReportGroup",
-      "codebuild:CreateReport",
-      "codebuild:UpdateReport",
-      "codebuild:BatchPutTestCases"
-    ]
-    resources = [
-      "arn:aws:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:report-group/${local.service_name}-*"
-    ]
-  }
+# The CloudWatch log group for the project.
+resource "aws_cloudwatch_log_group" "codebuild_log_group" {
+  name = "/aws/codebuild/${local.service_name}"
+  retention_in_days = local.workspace_settings["log_retention"]
 }
 
-resource "aws_iam_role_policy" "codebuild_role_policy" {
-  name   = "code-deploy"
-  role   = aws_iam_role.codebuild_role.name
-  policy = data.aws_iam_policy_document.codebuild_role_policy.json
+# The role that codebuild assumes for the purpose of the build.
+resource "aws_iam_role" "codebuild_role" {
+  name               = "${local.service_name}-role"
+  tags = {
+    classification = "build"
+  }
+  description        = "Role to be used when building the ${local.repo_name} repository"
+  assume_role_policy = data.aws_iam_policy_document.assume_role_policy.json
 }
 
+# Attach the common codebuild policy
 resource "aws_iam_role_policy_attachment" "codebuild_role_common_policy" {
   role       = aws_iam_role.codebuild_role.name
   policy_arn = data.aws_iam_policy.codebuild_common_policy.arn
 }
 
+# Basic inline policy to allow CodeBuild to run at all.
+resource "aws_iam_role_policy" "codebuild_role_policy" {
+  name   = "build"
+  role   = aws_iam_role.codebuild_role.name
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Resource = [
+          aws_cloudwatch_log_group.codebuild_log_group.arn,
+          "${aws_cloudwatch_log_group.codebuild_log_group.arn}:*"
+        ]
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Resource = "${data.aws_s3_bucket.artifacts_bucket.arn}/${local.repo_name}/*"
+        Action   = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:GetObjectTagging",
+          "s3:PutObjectTagging"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Resource = "arn:aws:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:report-group/${local.service_name}-*"
+        Action   = [
+          "codebuild:CreateReportGroup",
+          "codebuild:CreateReport",
+          "codebuild:UpdateReport",
+          "codebuild:BatchPutTestCases"
+        ]
+      }
+    ]
+  })
+}
+
+# Get the default compute type for the build
 data "aws_ssm_parameter" "build_compute_type" {
   name = "/build/default-compute-type"
 }
 
+# Get the default image for the build
 data "aws_ssm_parameter" "build_image" {
   name = "/build/default-image"
 }
 
+# Defines the codebuild project
 resource "aws_codebuild_project" "codebuild" {
   name          = local.service_name
-  description   = "Build the Java risk demo app"
+  description   = "build ${local.service_name}"
   build_timeout = "5"
   service_role  = aws_iam_role.codebuild_role.arn
 
@@ -130,7 +158,7 @@ resource "aws_codebuild_project" "codebuild" {
 
     environment_variable {
       name  = "ARTIFACTS_BUCKET"
-      value = var.artifacts_s3_bucket_name
+      value = data.aws_s3_bucket.artifacts_bucket.bucket
     }
 
     environment_variable {
@@ -152,10 +180,22 @@ resource "aws_codebuild_project" "codebuild" {
   source {
     type            = "GITHUB"
     location        = var.github_repo_url
-    git_clone_depth = 0
+    git_clone_depth = local.workspace_settings["git_clone_depth"]
   }
 
   source_version = local.workspace_settings["github_branch"]
+
+  secondary_sources {
+    location          = var.github_build_repo_url
+    git_clone_depth   = 1
+    source_identifier = "BUILD"
+    type              = "GITHUB"
+  }
+
+  secondary_source_version {
+    source_identifier = "BUILD"
+    source_version    = local.github_build_branch
+  }
 
   logs_config {
     cloudwatch_logs {
@@ -168,8 +208,10 @@ resource "aws_codebuild_project" "codebuild" {
   }
 }
 
+# Defines the GitHub webhook
 resource "aws_codebuild_webhook" "webhook" {
   project_name = aws_codebuild_project.codebuild.name
+  build_type = "BUILD"
 
   filter_group {
     filter {
@@ -181,9 +223,21 @@ resource "aws_codebuild_webhook" "webhook" {
       type    = local.workspace_settings["github_webhook_ref"]
       pattern = local.workspace_settings["github_branch"]
     }
+
+    filter {
+      type                    = "COMMIT_MESSAGE"
+      pattern                 = ".*SKIP_BUILD.*"
+      exclude_matched_pattern = true
+    }
   }
 }
 
+# Slack channel config
+data "awscc_chatbot_slack_channel_configuration" "slack_channel" {
+  id = "arn:aws:chatbot::${data.aws_caller_identity.current.account_id}:chat-configuration/slack-channel/codebuild-config-${terraform.workspace}"
+}
+
+# Defines Slack integration
 resource "aws_codestarnotifications_notification_rule" "slack-notification" {
   detail_type    = "BASIC"
   event_type_ids = ["codebuild-project-build-state-failed", "codebuild-project-build-state-succeeded"]
@@ -193,6 +247,6 @@ resource "aws_codestarnotifications_notification_rule" "slack-notification" {
 
   target {
     type    = "AWSChatbotSlack"
-    address = "arn:aws:chatbot::${data.aws_caller_identity.current.account_id}:chat-configuration/slack-channel/codebuild-config-${terraform.workspace}"
+    address = data.awscc_chatbot_slack_channel_configuration.slack_channel.arn
   }
 }

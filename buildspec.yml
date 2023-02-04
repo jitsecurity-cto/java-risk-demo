@@ -8,11 +8,12 @@ phases:
   pre_build:
     on-failure: ABORT
     commands:
-    - export s3_prefix=${ARTIFACTS_BUCKET}/${REPO_NAME}/${CODEBUILD_RESOLVED_SOURCE_VERSION}
-    - export s3_public_prefix=${PUBLIC_ARTIFACTS_BUCKET}/Java
-    - echo -e "upload artifacts to -\nhttps://s3.console.aws.amazon.com/s3/buckets/${s3_prefix}/\n"
-    - mkdir .mvn
-    - echo "${MAVEN_CLI_OPTIONS}" > .mvn/maven.config
+      - ${CODEBUILD_SRC_DIR_BUILD}/run-gitleaks.sh
+      - export s3_prefix=${ARTIFACTS_BUCKET}/${REPO_NAME}/${CODEBUILD_RESOLVED_SOURCE_VERSION}
+      - export s3_public_prefix=${PUBLIC_ARTIFACTS_BUCKET}/Java
+      - echo -e "upload artifacts to -\nhttps://s3.console.aws.amazon.com/s3/buckets/${s3_prefix}/\n"
+      - mkdir .mvn
+      - echo "${MAVEN_CLI_OPTIONS}" > .mvn/maven.config
   build:
     on-failure: ABORT
     commands:

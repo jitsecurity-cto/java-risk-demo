@@ -15,9 +15,16 @@ terraform {
 
 provider "aws" {
   region = var.region
+
+  default_tags {
+    tags = {
+      "solvo:owner" = local.service_name
+    }
+  }
 }
 
 locals {
+  service_name     = "excessive-permissions-demo-${terraform.workspace}"
   vpc_cidr         = "10.0.0.0/16"
   app_name         = "app-orders"
   cert_common_name = "${local.app_name}.solvo.dev"
@@ -295,6 +302,9 @@ resource "aws_iam_role" "instance_profile_role" {
 
 resource "aws_s3_bucket" "app_bucket" {
   bucket = local.bucket_name
+  tags = {
+    Controls = "CPRA"
+  }
 }
 
 resource "aws_s3_object" "app_bucket_object" {
