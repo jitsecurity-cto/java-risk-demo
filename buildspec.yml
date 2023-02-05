@@ -24,7 +24,7 @@ phases:
       - export package_version=$(echo $pom_version | sed -r "s/(.*)\.([0-9]*)/\1.\2.${CODEBUILD_BUILD_NUMBER}/")
       - mvn versions:set -DnewVersion=${package_version}
       - mvn clean package
-      - cp target/risk-demo-${package_version}-jar-with-dependencies.jar out/java-risk-demo.jar
+      - cp target/app.war out/
       - |
         set -e
         pushd out
