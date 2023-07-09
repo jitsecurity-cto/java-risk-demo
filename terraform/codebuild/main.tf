@@ -23,10 +23,11 @@ provider "aws" {
 }
 
 locals {
-  repo_name           = "java-risk-demo"
-  service_name        = "excessive-permissions-demo-build-${terraform.workspace}"
-  github_build_branch = "main"
-  workspace_settings  = {
+  repo_name            = "java-risk-demo"
+  service_name         = "excessive-permissions-demo-build-${terraform.workspace}"
+  github_build_branch  = "main"
+  build_trigger_branch = "^refs/heads/${local.workspace_settings["github_branch"]}$"
+  workspace_settings   = {
     Dev = {
       log_retention         = 90
       # Need full clone in order for gitleaks to work properly
@@ -226,7 +227,7 @@ resource "aws_codebuild_webhook" "webhook" {
 
     filter {
       type    = local.workspace_settings["github_webhook_ref"]
-      pattern = local.workspace_settings["github_branch"]
+      pattern = local.build_trigger_branch
     }
 
     filter {
