@@ -140,6 +140,11 @@ data "aws_ssm_parameter" "build_image" {
   name = "/build/default-image"
 }
 
+# Build notifications SNS topic
+data "aws_sns_topic" "build_notifications_topic" {
+  name = "build-notifications-${terraform.workspace}"
+}
+
 # Defines the codebuild project
 resource "aws_codebuild_project" "codebuild" {
   name          = local.service_name
@@ -238,21 +243,15 @@ resource "aws_codebuild_webhook" "webhook" {
   }
 }
 
-# Slack channel config
-data "awscc_chatbot_slack_channel_configuration" "slack_channel" {
-  id = "arn:aws:chatbot::${data.aws_caller_identity.current.account_id}:chat-configuration/slack-channel/codebuild-config-${terraform.workspace}"
-}
-
-# Defines Slack integration
+# Defines build notification integration
 resource "aws_codestarnotifications_notification_rule" "slack-notification" {
-  detail_type    = "BASIC"
+  detail_type    = "FULL"
   event_type_ids = ["codebuild-project-build-state-failed", "codebuild-project-build-state-succeeded"]
 
-  name     = "slack-notification-${local.service_name}"
+  name     = "build-notification-${local.service_name}"
   resource = aws_codebuild_project.codebuild.arn
 
   target {
-    type    = "AWSChatbotSlack"
-    address = data.awscc_chatbot_slack_channel_configuration.slack_channel.arn
+    address = data.aws_sns_topic.build_notifications_topic.arn
   }
 }
