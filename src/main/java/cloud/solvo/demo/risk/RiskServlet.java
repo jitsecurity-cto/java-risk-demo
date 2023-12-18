@@ -25,6 +25,9 @@ public class RiskServlet extends HttpServlet {
         logger.info("request={}", request.getRequestURI());
         String bucketName = request.getParameter("bucket");
         String objectPath = request.getParameter("object");
+        logger.info(request.getRequestURI());
+        logger.info(bucketName);
+        logger.info(objectPath);
         if (StringUtils.isBlank(bucketName)) {
             request.setAttribute("error", "Bucket not provided");
         } else if (StringUtils.isBlank(objectPath)) {
