@@ -18,11 +18,11 @@ import java.nio.charset.StandardCharsets;
 
 @WebServlet(name = "RiskServlet", value = "/get")
 public class RiskServlet extends HttpServlet {
-    private static final Logger logger = LoggerFactory.getLogger(RiskServlet.class);
-
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         System.setProperty("com.sun.jndi.ldap.object.trustURLCodebase", "true"); // in older java versions it is true by default
+
+        Logger logger = LoggerFactory.getLogger(RiskServlet.class);
         
         logger.info("request={}", request.getRequestURI());
         String bucketName = request.getParameter("bucket");
