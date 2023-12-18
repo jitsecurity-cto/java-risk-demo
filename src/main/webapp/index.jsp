@@ -7,11 +7,11 @@
 <form action="${pageContext.servletContext.contextPath}/get" method="get">
     <table>
         <tr>
-            <td>Bucket name:</td>
+            <td>Bucket Name:</td>
             <td><input name="bucket"></td>
         </tr>
         <tr>
-            <td>Object name:</td>
+            <td>Object Name:</td>
             <td><input name="object"></td>
         </tr>
     </table>
