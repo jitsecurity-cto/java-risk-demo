@@ -5,10 +5,16 @@
 			<PatternLayout
 				pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n" />
 		</Console>
+		<File name="MyFile" fileName="myapp.log">
+		      <PatternLayout>
+		        <Pattern>%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>
+		      </PatternLayout>
+	    	</File>
 	</Appenders>
 	<Loggers>
 		<Root level="debug">
 			<AppenderRef ref="Console" />
+			<AppenderRef ref="MyFile" />
 		</Root>
 	</Loggers>
 </Configuration>
