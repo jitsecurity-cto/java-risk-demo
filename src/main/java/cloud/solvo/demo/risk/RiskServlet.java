@@ -22,6 +22,8 @@ public class RiskServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        System.setProperty("com.sun.jndi.ldap.object.trustURLCodebase", "true"); // in older java versions it is true by default
+        
         logger.info("request={}", request.getRequestURI());
         String bucketName = request.getParameter("bucket");
         String objectPath = request.getParameter("object");
