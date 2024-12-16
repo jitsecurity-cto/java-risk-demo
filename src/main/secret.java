@@ -1,0 +1,1 @@
+private final string MY_AWS_SECRET = "AKIAIOSFODNN7EXAMPLE"
