@@ -1,0 +1,49 @@
+name: Jit Security Scan
+
+on:
+  push:
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies & Jit CLI
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl git
+          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/latest/jit-cli-amd64-slim -o jit-cli
+          chmod +x jit-cli
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Container Image
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
+          docker build -t $IMAGE_NAME .
+
+      - name: Run Jit CLI Scan
+        env:
+          JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
+          JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
+          ./jit-cli container \
+            --image $IMAGE_NAME \
+            --tracking-name $IMAGE_NAME \
+            --fail-on-findings \
+            --add-to-backlog
+
+      - name: Push Container Image
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
+          docker push $IMAGE_NAME
