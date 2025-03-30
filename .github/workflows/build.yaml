@@ -35,6 +35,7 @@ jobs:
         env:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
+          ENV_NAME: cto
         run: |
           IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
           ./jit-cli container \
