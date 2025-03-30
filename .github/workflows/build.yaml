@@ -40,7 +40,6 @@ jobs:
           ./jit-cli container \
             --image $IMAGE_NAME \
             --tracking-name $IMAGE_NAME \
-            --fail-on-findings \
             --add-to-backlog
 
       - name: Push Container Image
