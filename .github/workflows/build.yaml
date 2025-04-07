@@ -29,7 +29,7 @@ jobs:
 
       - name: Build Container Image
         run: |
-          IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:main"
           docker build -t $IMAGE_NAME .
 
       - name: Run Jit CLI Scan
@@ -38,7 +38,7 @@ jobs:
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: cto
         run: |
-          IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:main"
           ./jit-cli container \
             --image $IMAGE_NAME \
             --tracking-name $IMAGE_NAME \
@@ -46,5 +46,5 @@ jobs:
 
       - name: Push Container Image
         run: |
-          IMAGE_NAME="ghcr.io/${{ github.repository }}:latest"
+          IMAGE_NAME="ghcr.io/${{ github.repository }}:main"
           docker push $IMAGE_NAME
