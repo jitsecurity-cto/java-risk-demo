@@ -42,7 +42,7 @@ jobs:
           ./jit-cli container \
             --image $IMAGE_NAME \
             --tracking-name $IMAGE_NAME \
-            --add-to-backlog
+            --add-to-backlog 
 
       - name: Push Container Image
         run: |
