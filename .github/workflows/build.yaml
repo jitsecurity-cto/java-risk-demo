@@ -3,7 +3,6 @@ name: Jit Security Scan
 on:
   push:
 
-
 jobs:
   security-scan:
     runs-on: ubuntu-latest
