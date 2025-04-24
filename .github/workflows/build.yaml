@@ -41,7 +41,7 @@ jobs:
           IMAGE_NAME="ghcr.io/${{ github.repository }}:main"
           ./jit-cli container \
             --image $IMAGE_NAME \
-            --tracking-name $IMAGE_NAME \
+            --tracking-name 602401143452.dkr.ecr.us-east-1.amazonaws.com/eks/coredns:v1.11.1-eksbuild.8 \
             --add-to-backlog 
 
       - name: Push Container Image
