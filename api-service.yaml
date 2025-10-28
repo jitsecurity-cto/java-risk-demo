@@ -1,0 +1,23 @@
+family: api-service-task
+taskRoleArn: arn:aws:iam::123456789012:role/apiTaskRole
+executionRoleArn: arn:aws:iam::123456789012:role/apiTaskExecutionRole
+networkMode: awsvpc
+requiresCompatibilities:
+  - FARGATE
+  - EC2
+cpu: "512"
+memory: "1024"
+containerDefinitions:
+  - name: api-container
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/api-service:v1.2.3
+    cpu: 512
+    memory: 1024
+    essential: true
+    portMappings:
+      - containerPort: 8080
+        protocol: tcp
+    environment:
+      - name: DATABASE_URL
+        value: postgres://db.example.com:5432/api
+      - name: REDIS_HOST
+        value: redis.example.com

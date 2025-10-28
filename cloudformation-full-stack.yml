@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Full ECS stack with cluster, service, and task definition
+
+Resources:
+  MyECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: my-production-cluster
+
+  MyTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: my-app-task
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '512'
+      Memory: '1024'
+      TaskRoleArn: arn:aws:iam::123456789012:role/myTaskRole
+      ExecutionRoleArn: arn:aws:iam::123456789012:role/myExecutionRole
+      ContainerDefinitions:
+        - Name: app
+          Image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app:v2.0
+          Memory: 1024
+          Cpu: 512
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8080
+
+  MyECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: my-app-service
+      Cluster: !Ref MyECSCluster
+      TaskDefinition: !Ref MyTaskDefinition
+      DesiredCount: 3
+      LaunchType: FARGATE

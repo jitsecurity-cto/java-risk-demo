@@ -1,0 +1,26 @@
+service: my-ecs-service
+provider:
+  name: aws
+  region: us-east-1
+resources:
+  Resources:
+    MyECSTaskDefinition:
+      Type: AWS::ECS::TaskDefinition
+      Properties:
+        Family: my-serverless-task
+        NetworkMode: awsvpc
+        RequiresCompatibilities:
+          - FARGATE
+        Cpu: '1024'
+        Memory: '2048'
+        TaskRoleArn: arn:aws:iam::123456789012:role/myTaskRole
+        ExecutionRoleArn: arn:aws:iam::123456789012:role/myExecutionRole
+        ContainerDefinitions:
+          - Name: app-container
+            Image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
+            Memory: 2048
+            Cpu: 1024
+            Essential: true
+            PortMappings:
+              - ContainerPort: 3000
+                Protocol: tcp

@@ -1,0 +1,7 @@
+# This is not an ECS task definition
+version: "3.8"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"

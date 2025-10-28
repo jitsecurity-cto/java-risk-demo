@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - qa
+      - prod
+  LogLevel:
+    Type: String
+  Version:
+    Type: String
+Resources:
+  Task:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '256'
+      Memory: '512'
+      ContainerDefinitions:
+        - PortMappings:
+            - ContainerPort: 80
+          Memory: 512
+          MemoryReservation: 512
+          ReadonlyRootFilesystem: true
+          Essential: true
+          Image: !Sub '588738589316.dkr.ecr.us-east-1.amazonaws.com/platonic-backend:${Version}'
+          Name: web
+          Environment:
+            - Name: LIFECYCLE
+              Value: !Ref Environment
+            - Name: LOG_LEVEL
+              Value: !Ref LogLevel
+            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+              Value: !Sub 'http://otel.${Environment}.observability.dynata.com:4318'
+            - Name: OTEL_SERVICE_NAME
+              Value: arch-platonic-backend

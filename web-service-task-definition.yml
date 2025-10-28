@@ -1,0 +1,28 @@
+family: web-service-task
+taskRoleArn: arn:aws:iam::123456789012:role/ecsTaskRole
+executionRoleArn: arn:aws:iam::123456789012:role/ecsTaskExecutionRole
+networkMode: awsvpc
+requiresCompatibilities:
+  - FARGATE
+cpu: "256"
+memory: "512"
+containerDefinitions:
+  - name: web-container
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/web-app:latest
+    cpu: 256
+    memory: 512
+    essential: true
+    portMappings:
+      - containerPort: 80
+        protocol: tcp
+    environment:
+      - name: ENV
+        value: production
+      - name: LOG_LEVEL
+        value: info
+    logConfiguration:
+      logDriver: awslogs
+      options:
+        awslogs-group: /ecs/web-service
+        awslogs-region: us-east-1
+        awslogs-stream-prefix: ecs
