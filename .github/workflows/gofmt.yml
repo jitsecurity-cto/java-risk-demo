@@ -1,0 +1,56 @@
+name: gofmt check
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**.go'
+
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # or your project's Go version
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Get list of changed Go files
+        run: |
+          git diff --name-only origin/${{ github.base_ref }} ${{ github.sha }} -- '*.go' > changed_files.txt
+          cat changed_files.txt
+
+      - name: Unformated files
+        run: |
+          if [ -s changed_files.txt ]; then
+            unformatted=$(xargs gofmt -l < changed_files.txt)
+            if [ -n "$unformatted" ]; then
+              echo "The following files are not properly formatted:"
+              echo "$unformatted"
+            fi
+          fi
+
+      - name: Autoformat Go files
+        run: |
+          if [ -s changed_files.txt ]; then
+            xargs gofmt -w < changed_files.txt
+          fi
+
+      - name: Commit and push changes
+        if: success() && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "bot: autoformat Go files via gofmt" || exit 0
+          git pull --rebase origin ${{ github.head_ref }}
+          git push origin HEAD:${{ github.head_ref }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
