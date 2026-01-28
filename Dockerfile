@@ -1,4 +1,4 @@
-FROM debian:buster
+FROM debian:bullseye
 
 # Run as root (security issue)
 USER root
