@@ -1,4 +1,4 @@
-FROM debian:bullseye
+FROM debian:Bookworm
 
 # Run as root (security issue)
 USER root
